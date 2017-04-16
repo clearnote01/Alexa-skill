@@ -3,9 +3,12 @@ from random import randint
 from flask import Flask, render_template
 from flask_ask import Ask, statement, question, session
 import sqlite3
+import requests
+import query
 
 app = Flask(__name__)
 ask = Ask(app, "/")
+API_URL =  "https://api.cognitive.microsoft.com/bing/v5.0/news/search\?q\={query}\&count\=10\&offset\=0\&mkt\=en-us\&safeSearch\=Moderate"
 # logging.getLogger("flask_ask").setLevel(logging.DEBUG)
 
 class Message:
@@ -27,34 +30,48 @@ class Message:
         msg = 'Chai pe charcha needs to process the news for you'\
               ', Using your location given by amazon account, your'\
               ' location is set as {}'.format(location)
-        return msg 
+        return msg
 
-    def 
 
 msg = Message()
 
 # database
-users = {
-    '12sdfww1': {
-        'newsCount': 0,
-        'location': 'seattle'
-    }
-}
+users = query.execute("""
+    SELECT user_id,
+           newsCount,
+           location
+      FROM user
+    """)
+rows = [dict(user) for user in users.fetchall()]
+users = dict()
+for row in rows:
+    user = dict(
+        newsCount=row["newsCount"],
+        location=row["location"]
+    )
+    users[row["user_id"]] = user
 
-def create_new_user(location):
+
+def create_new_user(userId, location):
+    query.execute("""
+        INSERT INTO user
+             VALUES (user_id, newsCount, location)
+    """, (userId, -1, location))
     return {
         'newsCount': -1,
-        'location': location
+        'location': location,
     }
+
 
 @ask.launch
 def new_game():
     userId = session.user['userId']
+    global userId
     location = 'seattle'
     print('USERS: ', users)
     print('USER ID: ', userId)
     if userId not in users:
-        users[userId] = create_new_user(location)
+        users[userId] = create_new_user(userId, location)
         msg = msg.welcome_new_user() + msg.ask_location()
     else:
         msg = msg.welcome_existing_user()
@@ -62,7 +79,11 @@ def new_game():
 
 @ask.intent('StreamNewsIntent')
 def stream_news():
-    
+    news = requests.get(API_URL.format(query=users[userID]['location']), headers={"Ocp-Apim-Subscription-Key": "7f063e7d5c3f44faa51d85f77dc9cf25"})
+    news = dict(news.json())
+    # One of problems here:
+        ## 1. Bing provides the description of the news, however its not complete text. Few sentences only with a trailing ...
+
 
 @ask.intent("RecordOpinion")
 def record(opinion):
@@ -147,7 +168,7 @@ def choice(choice):
     else:
         return question('damn it sucks, the right answer was {}, try again?'.format(session.attributes['random']))
 
-    
+
 # @ask.intent("AnswerIntent", convert={'first': int, 'second': int, 'third': int})
 # def answer(first, second, third):
     # # winning_numbers = session.attributes['numbers']
